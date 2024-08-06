@@ -59,7 +59,8 @@ class KarrasEMA(Module):
         param_or_buffer_names_no_ema: Set[str] = set(),
         ignore_names: Set[str] = set(),
         ignore_startswith_names: Set[str] = set(),
-        allow_different_devices = False               # if the EMA model is on a different device (say CPU), automatically move the tensor
+        allow_different_devices = False,               # if the EMA model is on a different device (say CPU), automatically move the tensor
+        step_size_correction = False,
     ):
         super().__init__()
 
@@ -70,6 +71,7 @@ class KarrasEMA(Module):
 
         self.gamma = gamma
         self.frozen = frozen
+        self.step_size_correction = step_size_correction
 
         self.online_model = [model]
 
@@ -123,7 +125,13 @@ class KarrasEMA(Module):
 
     @property
     def beta(self):
-        return (1 - 1 / (self.step + 1)) ** (1 + self.gamma)
+        if self.step_size_correction:
+            return (
+                (1 - 1 / (self.step + 1)) ** (1 + self.gamma) *
+                (1 - 1 / (self.step + 1 + self.update_every)) ** (1 + self.gamma)
+            ) ** (self.update_every / 2)
+        else:
+            return (1 - 1 / (self.step + 1)) ** (1 + self.gamma)
 
     def eval(self):
         return self.ema_model.eval()
